@@ -1,4 +1,4 @@
-import type React from "react"
+import React from "react"
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   return (
