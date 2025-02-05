@@ -2,7 +2,6 @@ import { DashboardHeader } from "@/components/dashboard-header"
 import { DashboardShell } from "@/components/dashboard-shell"
 import { LeadAssignmentStats } from "@/components/lead-assignment-stats"
 import { RecentAssignments } from "@/components/recent-assignments"
-import React from "react"
 
 export default function DashboardPage() {
   return (
