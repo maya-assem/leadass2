@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Users, FileCheck, AlertCircle, TrendingUp } from "lucide-react"
-import { bitrixApi, type Agent, type Lead } from "@/lib/bitrix"
+import { Users, FileCheck, AlertCircle } from "lucide-react"
+import { bitrixApi, type Agent, type Deal } from "@/lib/bitrix"
 import { getRecentAssignments, recordAssignment } from "@/lib/db"
 import { useEffect, useState } from "react"
 
@@ -8,12 +8,12 @@ export function LeadAssignmentStats() {
   const [stats, setStats] = useState<{
     agents: Agent[]
     assignedToday: number
-    pendingLeads: Lead[]
+    pendingDeals: Deal[]
     recentAssignments: any[]
   }>({
     agents: [],
     assignedToday: 0,
-    pendingLeads: [],
+    pendingDeals: [],
     recentAssignments: [],
   })
   const [error, setError] = useState<string | null>(null)
@@ -21,7 +21,7 @@ export function LeadAssignmentStats() {
   useEffect(() => {
     async function fetchAgentStats() {
       try {
-        const agents = await bitrixApi.getAgentsWithLeadCounts()
+        const agents = await bitrixApi.getAgentsWithLeadDealCounts()
         setStats((prevStats) => ({ ...prevStats, agents }))
       } catch (err) {
         console.error("Error fetching agent stats:", err)
@@ -29,14 +29,14 @@ export function LeadAssignmentStats() {
       }
     }
 
-    async function fetchAndAssignNewLeads() {
+    async function fetchAndAssignNewDeals() {
       try {
-        const pendingLeads = await bitrixApi.getNewLeads()
-        const newAssignments = await bitrixApi.assignNewLeadsToAgents()
+        const pendingDeals = await bitrixApi.getNewDeals()
+        const newAssignments = await bitrixApi.assignNewDealsToAgents()
         newAssignments.forEach((assignment) => {
-          const lead = pendingLeads.find((l) => l.ID === assignment.leadId)
-          if (lead) {
-            recordAssignment(lead.ID, lead.TITLE, assignment.agentId, assignment.agentName)
+          const deal = pendingDeals.find((d) => d.ID === assignment.dealId)
+          if (deal) {
+            recordAssignment(deal.ID, deal.TITLE, assignment.agentId, assignment.agentName)
           }
         })
 
@@ -47,27 +47,27 @@ export function LeadAssignmentStats() {
         setStats((prevStats) => ({
           ...prevStats,
           assignedToday,
-          pendingLeads,
+          pendingDeals,
           recentAssignments,
         }))
       } catch (err) {
-        console.error("Error fetching and assigning new leads:", err)
-        setError("Failed to fetch and assign new leads. Please try again later.")
+        console.error("Error fetching and assigning new deals:", err)
+        setError("Failed to fetch and assign new deals. Please try again later.")
       }
     }
 
     // Initial fetch
     fetchAgentStats()
-    fetchAndAssignNewLeads()
+    fetchAndAssignNewDeals()
 
     // Set up intervals
     const agentStatsInterval = setInterval(fetchAgentStats, 60000) // Every 1 minute
-    const newLeadsInterval = setInterval(fetchAndAssignNewLeads, 180000) // Every 3 minutes
+    const newDealsInterval = setInterval(fetchAndAssignNewDeals, 60000) // Every 1 minute
 
     // Clean up intervals
     return () => {
       clearInterval(agentStatsInterval)
-      clearInterval(newLeadsInterval)
+      clearInterval(newDealsInterval)
     }
   }, [])
 
@@ -76,7 +76,7 @@ export function LeadAssignmentStats() {
   }
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-sm font-medium">Active Agents</CardTitle>
@@ -94,32 +94,31 @@ export function LeadAssignmentStats() {
         </CardHeader>
         <CardContent>
           <div className="text-2xl font-bold">{stats.assignedToday}</div>
-          <p className="text-xs text-muted-foreground">Leads assigned today</p>
+          <p className="text-xs text-muted-foreground">Deals assigned today</p>
         </CardContent>
       </Card>
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Pending Leads</CardTitle>
+          <CardTitle className="text-sm font-medium">Pending Deals</CardTitle>
           <AlertCircle className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold">{stats.pendingLeads.length}</div>
+          <div className="text-2xl font-bold">{stats.pendingDeals.length}</div>
           <p className="text-xs text-muted-foreground">Awaiting assignment</p>
         </CardContent>
       </Card>
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Agent Lead Counts</CardTitle>
-          <TrendingUp className="h-4 w-4 text-muted-foreground" />
+      <Card className="md:col-span-2 lg:col-span-3">
+        <CardHeader>
+          <CardTitle>Agent Lead Deal Counts</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="text-sm max-h-[150px] overflow-y-auto">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {stats.agents.map((agent) => (
-              <div key={agent.ID} className="flex justify-between items-center mb-1">
+              <div key={agent.ID} className="flex justify-between items-center p-2 bg-secondary rounded-md">
                 <span>
-                  {agent.NAME} {agent.LAST_NAME}:
+                  {agent.NAME} {agent.LAST_NAME}
                 </span>
-                <span className="font-semibold">{agent.LEAD_COUNT || 0}</span>
+                <span className="font-semibold">{agent.LEAD_DEAL_COUNT || 0}</span>
               </div>
             ))}
           </div>
@@ -128,5 +127,6 @@ export function LeadAssignmentStats() {
     </div>
   )
 }
+
 
 
