@@ -1,6 +1,6 @@
 import fetch from 'node-fetch';
 
-const BITRIX_URL = process.env.BITRIX24_WEBHOOK_URL;
+const BITRIX_URL = "https://diet-hub.bitrix24.com/rest/1/q5iy1s9aemfpc1j1";
 
 // Helper function to make Bitrix24 API calls
 async function callBitrix(method, params = {}) {
