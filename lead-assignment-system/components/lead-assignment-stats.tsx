@@ -1,16 +1,27 @@
+"use client"
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Users, FileCheck, AlertCircle } from "lucide-react"
 import { bitrixApi, type Agent, type Deal } from "@/lib/bitrix"
 import { getRecentAssignments, recordAssignment } from "@/lib/db"
 import { useEffect, useState } from "react"
 
+interface Stats {
+  agents: Agent[]
+  assignedToday: number
+  pendingDeals: Deal[]
+  recentAssignments: Array<{
+    id: string
+    dealId: string
+    dealTitle: string
+    agentId: string
+    agentName: string
+    assignedAt: string
+  }>
+}
+
 export function LeadAssignmentStats() {
-  const [stats, setStats] = useState<{
-    agents: Agent[]
-    assignedToday: number
-    pendingDeals: Deal[]
-    recentAssignments: any[]
-  }>({
+  const [stats, setStats] = useState<Stats>({
     agents: [],
     assignedToday: 0,
     pendingDeals: [],
@@ -127,6 +138,3 @@ export function LeadAssignmentStats() {
     </div>
   )
 }
-
-
-

@@ -2,7 +2,7 @@ import axios from "axios"
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
-const BITRIX_URL = "https://diet-hub.bitrix24.com/rest/1/q5iy1s9aemfpc1j1"
+const BITRIX_URL = process.env.NEXT_PUBLIC_BITRIX24_WEBHOOK_URL
 
 export interface Deal {
   ID: string
@@ -31,13 +31,17 @@ class BitrixAPI {
           url: `${BITRIX_URL}/${endpoint}`,
           data,
         })
+        if (response.data.error) {
+          throw new Error(`Bitrix API error: ${JSON.stringify(response.data.error)}`)
+        }
         return response.data
       } catch (error) {
         if (axios.isAxiosError(error) && error.response?.status === 429) {
           console.log(`Rate limit hit, retrying in ${(i + 1) * 1000}ms...`)
           await delay((i + 1) * 1000) // Wait for 1s, 2s, 3s before retrying
         } else {
-          throw error
+          console.error(`Error in Bitrix API request:`, error)
+          if (i === retries - 1) throw error
         }
       }
     }
@@ -45,14 +49,17 @@ class BitrixAPI {
   }
 
   async getClockedInAgents(): Promise<Agent[]> {
-    console.log("Getting clocked-in agents...")
+    console.log("Getting active agents...")
     try {
       const result = await this.request("user.get")
-      const activeAgents = result.result.filter((agent: any) => agent.IS_ONLINE === "Y")
-      console.log(`Found ${activeAgents.length} clocked-in agents`)
+      if (!result.result || !Array.isArray(result.result)) {
+        throw new Error(`Unexpected response format: ${JSON.stringify(result)}`)
+      }
+      const activeAgents = result.result.filter((agent: any) => agent.ACTIVE === true)
+      console.log(`Found ${activeAgents.length} active agents`)
       return activeAgents as Agent[]
     } catch (error) {
-      console.error("Error getting clocked-in agents:", error)
+      console.error("Error getting active agents:", error)
       return []
     }
   }
@@ -141,6 +148,9 @@ class BitrixAPI {
         },
         select: ["ID", "TITLE", "ASSIGNED_BY_ID", "DATE_CREATE", "STAGE_ID"],
       })
+      if (!result.result || !Array.isArray(result.result)) {
+        throw new Error(`Unexpected response format: ${JSON.stringify(result)}`)
+      }
       console.log(`Found ${result.result.length} new deals`)
       return result.result as Deal[]
     } catch (error) {
@@ -179,6 +189,27 @@ class BitrixAPI {
     }
 
     return assignments
+  }
+
+  async testConnection(): Promise<boolean> {
+    try {
+      const result = await this.request("app.info")
+      console.log("API connection test result:", result)
+      return true
+    } catch (error) {
+      console.error("API connection test failed:", error)
+      return false
+    }
+  }
+
+  constructor() {
+    this.testConnection().then((success) => {
+      if (success) {
+        console.log("Successfully connected to Bitrix24 API")
+      } else {
+        console.error("Failed to connect to Bitrix24 API")
+      }
+    })
   }
 }
 

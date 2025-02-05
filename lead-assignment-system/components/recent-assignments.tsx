@@ -1,10 +1,21 @@
+"use client"
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { getRecentAssignments } from "@/lib/db"
 import { useEffect, useState } from "react"
 
+interface DealAssignment {
+  id: string
+  dealId: string
+  dealTitle: string
+  agentId: string
+  agentName: string
+  assignedAt: string
+}
+
 export function RecentAssignments() {
-  const [assignments, setAssignments] = useState([])
+  const [assignments, setAssignments] = useState<DealAssignment[]>([])
 
   useEffect(() => {
     function fetchAssignments() {
