@@ -81,5 +81,3 @@ export async function GET() {
     assignedTo: leastLoadedAgent.ID,
   })
 }
-
-
