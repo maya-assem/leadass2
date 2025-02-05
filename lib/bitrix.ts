@@ -4,12 +4,12 @@ const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 const BITRIX_URL = "https://diet-hub.bitrix24.com/rest/1/q5iy1s9aemfpc1j1"
 
-export interface Lead {
+export interface Deal {
   ID: string
   TITLE: string
   ASSIGNED_BY_ID: string
   DATE_CREATE: string
-  STATUS_ID: string
+  STAGE_ID: string
 }
 
 export interface Agent {
@@ -17,10 +17,12 @@ export interface Agent {
   NAME: string
   LAST_NAME: string
   ACTIVE: boolean
-  LEAD_COUNT?: number
+  LEAD_DEAL_COUNT?: number
 }
 
 class BitrixAPI {
+  private assignedDeals: Set<string> = new Set()
+
   private async request(endpoint: string, method = "GET", data?: any, retries = 3) {
     for (let i = 0; i < retries; i++) {
       try {
@@ -55,33 +57,33 @@ class BitrixAPI {
     }
   }
 
-  async getAgentLeadCount(agentId: string): Promise<number> {
-    console.log(`Getting lead count for agent ${agentId}...`)
+  async getAgentLeadDealCount(agentId: string): Promise<number> {
+    console.log(`Getting lead deal count for agent ${agentId}...`)
     try {
-      const result = await this.request("crm.lead.list", "GET", {
+      const result = await this.request("crm.deal.list", "GET", {
         filter: {
           ASSIGNED_BY_ID: agentId,
-          STATUS_ID: "NEW", // Assuming "NEW" is the status ID for new leads
+          STAGE_ID: "NEW", // Assuming "NEW" is the stage ID for leads
         },
         select: ["ID"],
       })
-      console.log(`Agent ${agentId} has ${result.result.length} active leads`)
+      console.log(`Agent ${agentId} has ${result.result.length} lead deals`)
       return result.result.length
     } catch (error) {
-      console.error(`Error getting lead count for agent ${agentId}:`, error)
+      console.error(`Error getting lead deal count for agent ${agentId}:`, error)
       return 0
     }
   }
 
-  async getAgentsWithLeadCounts(): Promise<Agent[]> {
+  async getAgentsWithLeadDealCounts(): Promise<Agent[]> {
     const agents = await this.getClockedInAgents()
     const agentsWithCountsPromises = agents.map(async (agent) => {
       try {
-        const leadCount = await this.getAgentLeadCount(agent.ID)
-        return { ...agent, LEAD_COUNT: leadCount }
+        const leadDealCount = await this.getAgentLeadDealCount(agent.ID)
+        return { ...agent, LEAD_DEAL_COUNT: leadDealCount }
       } catch (error) {
-        console.error(`Failed to get lead count for agent ${agent.ID}:`, error)
-        return { ...agent, LEAD_COUNT: 0 }
+        console.error(`Failed to get lead deal count for agent ${agent.ID}:`, error)
+        return { ...agent, LEAD_DEAL_COUNT: 0 }
       }
     })
     const results = await Promise.allSettled(agentsWithCountsPromises)
@@ -93,73 +95,86 @@ class BitrixAPI {
   async findLeastLoadedAgent(agents: Agent[]): Promise<Agent | null> {
     console.log("Finding least loaded agent...")
     if (agents.length === 0) return null
-    const validAgents = agents.filter((agent) => agent.LEAD_COUNT !== undefined)
+    const validAgents = agents.filter((agent) => agent.LEAD_DEAL_COUNT !== undefined)
     if (validAgents.length === 0) {
-      console.log("No agents with valid lead counts found")
+      console.log("No agents with valid lead deal counts found")
       return null
     }
     return validAgents.reduce((min, agent) =>
-      (agent.LEAD_COUNT || 0) < (min.LEAD_COUNT || Number.POSITIVE_INFINITY) ? agent : min,
+      (agent.LEAD_DEAL_COUNT || 0) < (min.LEAD_DEAL_COUNT || Number.POSITIVE_INFINITY) ? agent : min,
     )
   }
 
-  async assignLeadToAgent(leadId: string, agentId: string): Promise<boolean> {
-    console.log(`Assigning lead ${leadId} to agent ${agentId}...`)
+  async assignDealToAgent(dealId: string, agentId: string): Promise<boolean> {
+    if (this.assignedDeals.has(dealId)) {
+      console.log(`Deal ${dealId} has already been assigned. Skipping.`)
+      return false
+    }
+
+    console.log(`Assigning deal ${dealId} to agent ${agentId}...`)
     try {
-      const result = await this.request("crm.lead.update", "POST", {
-        id: leadId,
+      const result = await this.request("crm.deal.update", "POST", {
+        id: dealId,
         fields: {
           ASSIGNED_BY_ID: agentId,
         },
       })
-      return !!result.result
+      if (result.result) {
+        this.assignedDeals.add(dealId)
+        return true
+      }
+      return false
     } catch (error) {
-      console.error("Error assigning lead:", error)
+      console.error("Error assigning deal:", error)
       return false
     }
   }
 
-  async getNewLeads(): Promise<Lead[]> {
-    console.log("Checking for new leads...")
+  async getNewDeals(): Promise<Deal[]> {
+    console.log("Checking for new deals...")
     try {
-      const result = await this.request("crm.lead.list", "GET", {
+      const result = await this.request("crm.deal.list", "GET", {
         filter: {
-          STATUS_ID: "NEW",
-          ASSIGNED_BY_ID: 0, // Unassigned leads
-          ">DATE_CREATE": new Date(Date.now() - 5 * 60 * 1000).toISOString(), // Only leads created in the last 5 minutes
+          STAGE_ID: "NEW", // Only deals in the "lead" stage
+          ASSIGNED_BY_ID: 0, // Unassigned deals
+          ">DATE_CREATE": new Date(Date.now() - 60 * 1000).toISOString(), // Only deals created in the last 1 minute
         },
-        select: ["ID", "TITLE", "ASSIGNED_BY_ID", "DATE_CREATE", "STATUS_ID"],
+        select: ["ID", "TITLE", "ASSIGNED_BY_ID", "DATE_CREATE", "STAGE_ID"],
       })
-      console.log(`Found ${result.result.length} new leads`)
-      return result.result as Lead[]
+      console.log(`Found ${result.result.length} new deals`)
+      return result.result as Deal[]
     } catch (error) {
-      console.error("Error getting new leads:", error)
+      console.error("Error getting new deals:", error)
       return []
     }
   }
 
-  async assignNewLeadsToAgents(): Promise<{ leadId: string; agentId: string; agentName: string }[]> {
-    const newLeads = await this.getNewLeads()
-    let agents = await this.getAgentsWithLeadCounts()
-    const assignments: { leadId: string; agentId: string; agentName: string }[] = []
+  async assignNewDealsToAgents(): Promise<{ dealId: string; agentId: string; agentName: string }[]> {
+    const newDeals = await this.getNewDeals()
+    let agents = await this.getAgentsWithLeadDealCounts()
+    const assignments: { dealId: string; agentId: string; agentName: string }[] = []
 
-    for (const lead of newLeads) {
-      const leastLoadedAgent = await this.findLeastLoadedAgent(agents)
-      if (leastLoadedAgent) {
-        const success = await this.assignLeadToAgent(lead.ID, leastLoadedAgent.ID)
-        if (success) {
-          assignments.push({
-            leadId: lead.ID,
-            agentId: leastLoadedAgent.ID,
-            agentName: `${leastLoadedAgent.NAME} ${leastLoadedAgent.LAST_NAME}`,
-          })
-          leastLoadedAgent.LEAD_COUNT = (leastLoadedAgent.LEAD_COUNT || 0) + 1
+    for (const deal of newDeals) {
+      if (!this.assignedDeals.has(deal.ID)) {
+        const leastLoadedAgent = await this.findLeastLoadedAgent(agents)
+        if (leastLoadedAgent) {
+          const success = await this.assignDealToAgent(deal.ID, leastLoadedAgent.ID)
+          if (success) {
+            assignments.push({
+              dealId: deal.ID,
+              agentId: leastLoadedAgent.ID,
+              agentName: `${leastLoadedAgent.NAME} ${leastLoadedAgent.LAST_NAME}`,
+            })
+            leastLoadedAgent.LEAD_DEAL_COUNT = (leastLoadedAgent.LEAD_DEAL_COUNT || 0) + 1
 
-          // Update the agents array with the new lead count
-          agents = agents.map((agent) => (agent.ID === leastLoadedAgent.ID ? leastLoadedAgent : agent))
+            // Update the agents array with the new lead deal count
+            agents = agents.map((agent) => (agent.ID === leastLoadedAgent.ID ? leastLoadedAgent : agent))
+          }
+        } else {
+          console.log(`No available agent to assign deal ${deal.ID}`)
         }
       } else {
-        console.log(`No available agent to assign lead ${lead.ID}`)
+        console.log(`Deal ${deal.ID} has already been assigned. Skipping.`)
       }
     }
 
@@ -168,5 +183,3 @@ class BitrixAPI {
 }
 
 export const bitrixApi = new BitrixAPI()
-
-
