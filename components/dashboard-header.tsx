@@ -1,5 +1,3 @@
-import React from "react"
-
 interface DashboardHeaderProps {
   heading: string
   text?: string
@@ -13,5 +11,6 @@ export function DashboardHeader({ heading, text }: DashboardHeaderProps) {
     </div>
   )
 }
+
 
 
