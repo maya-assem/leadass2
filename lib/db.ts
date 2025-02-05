@@ -31,4 +31,3 @@ function getAssignments(): DealAssignment[] {
   return storedAssignments ? JSON.parse(storedAssignments) : []
 }
 
-
